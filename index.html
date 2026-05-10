@@ -1,0 +1,1051 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  User, Lock, Camera, Clock, Calendar, LogOut, CheckCircle, 
+  XCircle, MapPin, Activity, Users, FileText, Download, Menu, X, Image as ImageIcon, UserPlus,
+  Eye, EyeOff, Key, Trash2, AlertTriangle, Moon, Sun
+} from 'lucide-react';
+
+const MOCK_USERS = [
+  { id: 1, name: 'Admin HRD', email: 'admin@kantor.com', password: '123', role: 'admin', jabatan: 'HR Manager', divisi: 'HR', foto: 'https://i.pravatar.cc/150?u=admin' },
+  { id: 2, name: 'Budi Santoso', email: 'budi@kantor.com', password: '123', role: 'pegawai', jabatan: 'Staff IT', divisi: 'IT', foto: 'https://i.pravatar.cc/150?u=budi' },
+  { id: 3, name: 'Siti Aminah', email: 'siti@kantor.com', password: '123', role: 'pegawai', jabatan: 'Marketing Executive', divisi: 'Marketing', foto: 'https://i.pravatar.cc/150?u=siti' }
+];
+
+const MOCK_ATTENDANCE = [
+  { id: 1, user_id: 2, tanggal: new Date().toISOString().split('T')[0], checkin_time: '07:55', checkout_time: null, status: 'Hadir', checkin_photo: null }
+];
+
+// Pastikan spasi di-encode agar gambar lampiran terbaca oleh browser
+const LOGO_URL = "Logo%20PKBM.jpg"; 
+
+export default function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [users, setUsers] = useState(MOCK_USERS);
+  const [attendances, setAttendances] = useState(MOCK_ATTENDANCE);
+  const [currentView, setCurrentView] = useState('dashboard');
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  const toggleTheme = () => setIsDarkMode(!isDarkMode);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
+  };
+
+  const handleLogin = (email, password) => {
+    const user = users.find(u => u.email === email && u.password === password);
+    if (user) {
+      setCurrentUser(user);
+      setCurrentView('dashboard');
+      showToast(`Selamat datang, ${user.name}`);
+    } else {
+      showToast('Email atau password salah!', 'error');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setCurrentView('dashboard');
+  };
+
+  const handleUpdateUser = (updatedUser) => {
+    setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
+    if (currentUser.id === updatedUser.id) {
+      setCurrentUser(updatedUser);
+    }
+  };
+
+  return (
+    <div className={`${isDarkMode ? 'dark' : ''} transition-colors duration-300 min-h-screen w-full bg-slate-50 dark:bg-slate-900`}>
+      {!currentUser ? (
+        <LoginScreen onLogin={handleLogin} toast={toast} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
+      ) : (
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row font-sans text-slate-800 dark:text-slate-100 transition-colors duration-300">
+          
+          {/* Toast Notification */}
+          {toast.show && (
+            <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg transform transition-all flex items-center gap-2 text-white ${toast.type === 'error' ? 'bg-red-500' : 'bg-emerald-600'}`}>
+              {toast.type === 'error' ? <XCircle size={20} /> : <CheckCircle size={20} />}
+              {toast.message}
+            </div>
+          )}
+
+          <Sidebar 
+            user={currentUser} 
+            currentView={currentView} 
+            setView={setCurrentView} 
+            onLogout={handleLogout}
+            isDarkMode={isDarkMode}
+          />
+
+          <main className="flex-1 p-4 md:p-8 h-screen overflow-y-auto">
+            <Header user={currentUser} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
+            
+            <div className="mt-8 pb-10">
+              {currentUser.role === 'pegawai' && (
+                <>
+                  {currentView === 'dashboard' && <EmployeeDashboard user={currentUser} attendances={attendances} setView={setCurrentView} />}
+                  {currentView === 'camera' && <CameraCapture user={currentUser} attendances={attendances} setAttendances={setAttendances} setView={setCurrentView} showToast={showToast} />}
+                  {currentView === 'history' && <AttendanceHistory user={currentUser} attendances={attendances} />}
+                  {currentView === 'profile' && <UserProfile user={currentUser} onUpdateUser={handleUpdateUser} showToast={showToast} />}
+                </>
+              )}
+
+              {currentUser.role === 'admin' && (
+                <>
+                  {currentView === 'dashboard' && <AdminDashboard users={users} attendances={attendances} />}
+                  {currentView === 'employees' && <AdminEmployees users={users} setUsers={setUsers} showToast={showToast} />}
+                  {currentView === 'reports' && <AdminReports users={users} attendances={attendances} />}
+                  {currentView === 'profile' && <UserProfile user={currentUser} onUpdateUser={handleUpdateUser} showToast={showToast} />}
+                </>
+              )}
+            </div>
+          </main>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LoginScreen({ onLogin, toast, isDarkMode, toggleTheme }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-emerald-600 to-emerald-800 dark:from-slate-800 dark:to-slate-950 flex items-center justify-center p-4 transition-colors duration-300 relative">
+      <button 
+        onClick={toggleTheme} 
+        className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-sm transition-all shadow-sm"
+        title="Ganti Tema"
+      >
+        {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
+      </button>
+
+      {toast.show && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg bg-red-500 text-white flex items-center gap-2">
+          <XCircle size={20} /> {toast.message}
+        </div>
+      )}
+      
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transition-colors duration-300 border border-slate-200 dark:border-slate-700">
+        <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
+          <div className="w-24 h-24 mx-auto mb-4 bg-white rounded-xl p-1 shadow-sm flex items-center justify-center overflow-hidden">
+             <img 
+               src={LOGO_URL} 
+               alt="Logo PKBM" 
+               className="w-full h-full object-contain"
+               onError={(e) => { e.target.onerror = null; e.target.src = "https://ui-avatars.com/api/?name=PKBM&background=10b981&color=fff&size=150"; }} 
+             />
+          </div>
+          <h1 className="text-xl font-bold text-emerald-700 dark:text-emerald-500">PKBM Fatimah Az Zahra</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Sistem Presensi Digital</p>
+        </div>
+        <div className="p-8">
+          <form onSubmit={(e) => { e.preventDefault(); onLogin(email, password); }} className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email / Username</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User size={18} className="text-slate-400 dark:text-slate-500" />
+                </div>
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                  placeholder="budi@kantor.com"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Password</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock size={18} className="text-slate-400 dark:text-slate-500" />
+                </div>
+                <input 
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-10 pr-12 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                  placeholder="••••••••"
+                  required
+                />
+                <button 
+                  type="button" 
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            
+            <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-lg transition-colors shadow-md shadow-emerald-500/30 mt-6">
+              Masuk
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({ user, currentView, setView, onLogout, isDarkMode }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const menuPegawai = [
+    { id: 'dashboard', icon: Activity, label: 'Dashboard' },
+    { id: 'history', icon: Calendar, label: 'Riwayat Absensi' },
+    { id: 'profile', icon: User, label: 'Profil Saya' },
+  ];
+
+  const menuAdmin = [
+    { id: 'dashboard', icon: Activity, label: 'Dashboard Admin' },
+    { id: 'employees', icon: Users, label: 'Manajemen Pegawai' },
+    { id: 'reports', icon: FileText, label: 'Rekap Laporan' },
+    { id: 'profile', icon: User, label: 'Profil Saya' },
+  ];
+
+  const menus = user.role === 'admin' ? menuAdmin : menuPegawai;
+
+  return (
+    <>
+      {/* Mobile Toggle */}
+      <div className="md:hidden p-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center transition-colors">
+        <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-500 font-bold text-lg">
+          <div className="w-8 h-8 bg-white rounded p-0.5 flex items-center justify-center overflow-hidden shrink-0">
+             <img src={LOGO_URL} alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.target.onerror=null; e.target.style.display='none'; }} /> 
+          </div>
+          <span className="truncate max-w-[200px]">PKBM Fatimah Az Zahra</span>
+        </div>
+        <button onClick={() => setIsOpen(!isOpen)} className="text-slate-600 dark:text-slate-300">
+          {isOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      </div>
+
+      {/* Sidebar Content */}
+      <div className={`${isOpen ? 'block' : 'hidden'} md:block w-full md:w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 h-auto md:h-screen flex-shrink-0 flex flex-col transition-all z-20`}>
+        <div className="p-6 hidden md:flex flex-col items-center gap-3 text-emerald-700 dark:text-emerald-500 font-bold text-center border-b border-slate-100 dark:border-slate-700">
+          <div className="w-16 h-16 bg-white rounded-xl p-1 shadow-sm flex items-center justify-center overflow-hidden">
+             <img src={LOGO_URL} alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.target.onerror=null; e.target.src = "https://ui-avatars.com/api/?name=PKBM&background=10b981&color=fff"; }} /> 
+          </div>
+          <span className="text-lg leading-tight">PKBM Fatimah Az Zahra</span>
+        </div>
+        
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700">
+          <div className="flex items-center gap-4">
+            <img src={user.foto} alt="Profile" className="w-12 h-12 rounded-full ring-2 ring-emerald-100 dark:ring-emerald-900 object-cover" />
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-white truncate max-w-[120px]">{user.name}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{user.jabatan}</p>
+            </div>
+          </div>
+        </div>
+
+        <nav className="flex-1 py-4 overflow-y-auto">
+          <ul className="space-y-1 px-3">
+            {menus.map(menu => {
+              const Icon = menu.icon;
+              const isActive = currentView === menu.id;
+              return (
+                <li key={menu.id}>
+                  <button 
+                    onClick={() => { setView(menu.id); setIsOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-slate-900 dark:hover:text-white'}`}
+                  >
+                    <Icon size={18} /> {menu.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <div className="p-4 border-t border-slate-200 dark:border-slate-700">
+          <button onClick={onLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition-colors">
+            <LogOut size={18} /> Keluar
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Header({ user, isDarkMode, toggleTheme }) {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatDate = (date) => {
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    return date.toLocaleDateString('id-ID', options);
+  };
+
+  return (
+    <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">
+          {user.role === 'admin' ? 'Dashboard Admin' : 'Dashboard Pegawai'}
+        </h2>
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{formatDate(time)}</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <button 
+          onClick={toggleTheme}
+          className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+          title="Toggle Mode Malam"
+        >
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+        <div className="bg-white dark:bg-slate-800 px-6 py-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-3 transition-colors">
+          <Clock className="text-emerald-500" size={24} />
+          <span className="text-2xl font-mono font-bold tracking-wider text-slate-700 dark:text-slate-200">
+            {time.toLocaleTimeString('id-ID')}
+          </span>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function EmployeeDashboard({ user, attendances, setView }) {
+  const today = new Date().toISOString().split('T')[0];
+  const todayRecord = attendances.find(a => a.user_id === user.id && a.tanggal === today);
+
+  const status = todayRecord 
+    ? (todayRecord.checkout_time ? 'Selesai' : 'Sudah Check-in') 
+    : 'Belum Absen';
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 md:p-8 transition-colors">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="text-center md:text-left">
+            <h3 className="text-lg font-semibold text-slate-600 dark:text-slate-400 mb-1">Status Kehadiran Hari Ini</h3>
+            <div className="flex items-center gap-2 justify-center md:justify-start">
+              <div className={`w-3 h-3 rounded-full ${status === 'Belum Absen' ? 'bg-amber-500' : 'bg-emerald-500'}`}></div>
+              <span className="text-2xl font-bold text-slate-800 dark:text-white">{status}</span>
+            </div>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+            {!todayRecord ? (
+              <button onClick={() => setView('camera')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-xl font-semibold transition-all shadow-lg shadow-emerald-500/30">
+                <Camera size={20} /> Absen Masuk
+              </button>
+            ) : !todayRecord.checkout_time ? (
+              <button onClick={() => setView('camera')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-8 py-4 rounded-xl font-semibold transition-all shadow-lg shadow-amber-500/30">
+                <Camera size={20} /> Absen Pulang
+              </button>
+            ) : (
+              <div className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-8 py-4 rounded-xl font-semibold border border-slate-200 dark:border-slate-600">
+                <CheckCircle size={20} /> Selesai Hari Ini
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mt-8 pt-8 border-t border-slate-100 dark:border-slate-700">
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl text-center border border-slate-100 dark:border-slate-700">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Jam Masuk</p>
+            <p className="text-xl font-bold text-slate-800 dark:text-white">{todayRecord ? todayRecord.checkin_time : '--:--'}</p>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl text-center border border-slate-100 dark:border-slate-700">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Jam Pulang</p>
+            <p className="text-xl font-bold text-slate-800 dark:text-white">{todayRecord?.checkout_time ? todayRecord.checkout_time : '--:--'}</p>
+          </div>
+        </div>
+      </div>
+
+      <h3 className="text-lg font-bold text-slate-800 dark:text-white mt-8 mb-4">Ringkasan Bulan Ini</h3>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard title="Total Hadir" value="18" suffix="hari" icon={CheckCircle} color="text-emerald-500" bg="bg-emerald-50 dark:bg-emerald-900/20" />
+        <StatCard title="Terlambat" value="2" suffix="kali" icon={Clock} color="text-amber-500" bg="bg-amber-50 dark:bg-amber-900/20" />
+        <StatCard title="Izin/Sakit" value="1" suffix="hari" icon={Activity} color="text-blue-500" bg="bg-blue-50 dark:bg-blue-900/20" />
+        <StatCard title="Alpha" value="0" suffix="hari" icon={XCircle} color="text-red-500" bg="bg-red-50 dark:bg-red-900/20" />
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ title, value, suffix, icon: Icon, color, bg }) {
+  return (
+    <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col transition-colors">
+      <div className={`${bg} ${color} w-10 h-10 rounded-lg flex items-center justify-center mb-4`}>
+        <Icon size={20} />
+      </div>
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{title}</p>
+      <div className="flex items-baseline gap-1">
+        <span className="text-2xl font-bold text-slate-800 dark:text-white">{value}</span>
+        <span className="text-sm text-slate-500 dark:text-slate-400">{suffix}</span>
+      </div>
+    </div>
+  );
+}
+
+function CameraCapture({ user, attendances, setAttendances, setView, showToast }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null); // Menyimpan reference stream aktif
+  const [photo, setPhoto] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
+
+  const today = new Date().toISOString().split('T')[0];
+  const todayRecord = attendances.find(a => a.user_id === user.id && a.tanggal === today);
+  const isCheckin = !todayRecord;
+
+  useEffect(() => {
+    startCamera();
+    return () => stopCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startCamera = async () => {
+    try {
+      setCameraError(false);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      setCameraError(true);
+      showToast('Kamera tidak dapat diakses. Mohon izinkan browser Anda menggunakan kamera.', 'error');
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      const tracks = streamRef.current.getTracks();
+      tracks.forEach(track => track.stop());
+    }
+  };
+
+  const capturePhoto = () => {
+    if (cameraError) {
+      simulatePhoto();
+      return;
+    }
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (video && video.videoWidth) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg');
+      setPhoto(dataUrl);
+      stopCamera();
+    }
+  };
+
+  const simulatePhoto = () => {
+    const canvas = canvasRef.current;
+    canvas.width = 400; canvas.height = 300;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#cbd5e1'; ctx.fillRect(0, 0, 400, 300);
+    ctx.fillStyle = '#475569'; ctx.font = '20px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('Simulasi Foto Selfie', 200, 150);
+    setPhoto(canvas.toDataURL('image/jpeg'));
+  };
+
+  const retakePhoto = () => {
+    setPhoto(null);
+    startCamera();
+  };
+
+  const saveAttendance = () => {
+    setLoading(true);
+    setTimeout(() => {
+      const timeNow = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      
+      if (isCheckin) {
+        const newRecord = {
+          id: Date.now(),
+          user_id: user.id,
+          tanggal: today,
+          checkin_time: timeNow,
+          checkout_time: null,
+          status: 'Hadir',
+          checkin_photo: photo
+        };
+        setAttendances([...attendances, newRecord]);
+        showToast('Absen Masuk Berhasil Disimpan!');
+      } else {
+        const updatedAttendances = attendances.map(a => {
+          if (a.id === todayRecord.id) {
+            return { ...a, checkout_time: timeNow, checkout_photo: photo };
+          }
+          return a;
+        });
+        setAttendances(updatedAttendances);
+        showToast('Absen Pulang Berhasil Disimpan!');
+      }
+      
+      setLoading(false);
+      setView('dashboard');
+    }, 1000);
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors animate-in fade-in duration-300">
+      <div className="p-6 text-center border-b border-slate-100 dark:border-slate-700">
+        <h3 className="text-xl font-bold text-slate-800 dark:text-white">
+          {isCheckin ? 'Absen Masuk' : 'Absen Pulang'}
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Posisikan wajah Anda pada area kamera</p>
+      </div>
+
+      <div className="p-6 bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center">
+        <div className="relative w-full max-w-sm aspect-[3/4] bg-slate-900 rounded-xl overflow-hidden border-4 border-slate-200 dark:border-slate-700 shadow-inner flex items-center justify-center">
+          {!photo ? (
+            <>
+              {cameraError ? (
+                <div className="text-center text-slate-400 p-6">
+                  <Camera size={48} className="mx-auto mb-2 opacity-50" />
+                  <p>Kamera diblokir atau tidak tersedia.</p>
+                  <p className="text-xs mt-2">Klik 'Ambil Foto' untuk simulasi absensi.</p>
+                </div>
+              ) : (
+                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover transform scale-x-[-1]" />
+              )}
+              {/* Overlay Face Guide */}
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                <div className="w-48 h-64 border-2 border-dashed border-white/50 rounded-full"></div>
+              </div>
+            </>
+          ) : (
+            <img src={photo} alt="Selfie" className="w-full h-full object-cover transform scale-x-[-1]" />
+          )}
+          <canvas ref={canvasRef} className="hidden" />
+        </div>
+
+        <div className="mt-8 flex gap-4 w-full max-w-sm">
+          {!photo ? (
+            <>
+              <button onClick={() => setView('dashboard')} className="flex-1 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 py-3 rounded-xl font-medium transition-colors">
+                Batal
+              </button>
+              <button onClick={capturePhoto} className="flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/30 flex justify-center items-center gap-2 transition-transform active:scale-95">
+                <Camera size={20} /> Ambil Foto
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={retakePhoto} disabled={loading} className="flex-1 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
+                Ulangi
+              </button>
+              <button onClick={saveAttendance} disabled={loading} className="flex-[2] bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/30 flex justify-center items-center gap-2 transition-transform active:scale-95 disabled:opacity-70">
+                {loading ? 'Menyimpan...' : <><CheckCircle size={20} /> Simpan Absensi</>}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AttendanceHistory({ user, attendances }) {
+  const myHistory = attendances.filter(a => a.user_id === user.id);
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors animate-in fade-in duration-300">
+      <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <h3 className="text-lg font-bold text-slate-800 dark:text-white">Riwayat Kehadiran Anda</h3>
+        <div className="flex gap-2">
+          <button className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 px-4 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+            <Calendar size={16} /> Bulan Ini
+          </button>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[500px]">
+          <thead>
+            <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200 dark:border-slate-700">
+              <th className="p-4 font-medium whitespace-nowrap">Tanggal</th>
+              <th className="p-4 font-medium whitespace-nowrap">Jam Masuk</th>
+              <th className="p-4 font-medium whitespace-nowrap">Jam Pulang</th>
+              <th className="p-4 font-medium whitespace-nowrap">Status</th>
+              <th className="p-4 font-medium whitespace-nowrap">Bukti Foto</th>
+            </tr>
+          </thead>
+          <tbody>
+            {myHistory.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="p-8 text-center text-slate-400 dark:text-slate-500">Belum ada data absensi.</td>
+              </tr>
+            ) : (
+              myHistory.map((record) => (
+                <tr key={record.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                  <td className="p-4 text-slate-800 dark:text-slate-200 font-medium">{record.tanggal}</td>
+                  <td className="p-4 text-slate-600 dark:text-slate-400">{record.checkin_time}</td>
+                  <td className="p-4 text-slate-600 dark:text-slate-400">{record.checkout_time || '-'}</td>
+                  <td className="p-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${record.status === 'Hadir' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'}`}>
+                      {record.status}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    {record.checkin_photo ? (
+                      <img src={record.checkin_photo} alt="Bukti" className="w-10 h-10 rounded-lg object-cover border border-slate-200 dark:border-slate-600" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-500">
+                        <ImageIcon size={16} />
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AdminDashboard({ users, attendances }) {
+  const employees = users.filter(u => u.role === 'pegawai');
+  const today = new Date().toISOString().split('T')[0];
+  const presentToday = attendances.filter(a => a.tanggal === today).length;
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 dark:from-emerald-700 dark:to-emerald-900 rounded-2xl p-6 text-white shadow-lg shadow-emerald-500/20">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-emerald-100 mb-1">Total Pegawai</p>
+              <h4 className="text-4xl font-bold">{employees.length}</h4>
+            </div>
+            <div className="bg-white/20 p-3 rounded-xl"><Users size={24} /></div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-colors">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Hadir Hari Ini</p>
+              <h4 className="text-3xl font-bold text-slate-800 dark:text-white">{presentToday}</h4>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-500 p-3 rounded-xl"><CheckCircle size={24} /></div>
+          </div>
+          <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+            <div className="bg-blue-500 h-full transition-all duration-1000" style={{ width: `${employees.length ? (presentToday/employees.length)*100 : 0}%` }}></div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-colors">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Belum Absen / Alpha</p>
+              <h4 className="text-3xl font-bold text-slate-800 dark:text-white">{employees.length - presentToday}</h4>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/20 text-red-500 p-3 rounded-xl"><XCircle size={24} /></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 transition-colors">
+        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4">Aktivitas Absensi Terbaru</h3>
+        <div className="space-y-4">
+          {attendances.length > 0 ? attendances.slice().reverse().map(record => {
+            const user = users.find(u => u.id === record.user_id);
+            if (!user) return null;
+            return (
+              <div key={record.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-100 dark:border-slate-700 transition-colors">
+                <div className="flex items-center gap-4">
+                  <img src={user.foto} alt={user.name} className="w-10 h-10 rounded-full object-cover" />
+                  <div>
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">{user.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{user.divisi}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="inline-block px-3 py-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs font-bold rounded-full mb-1">Check-in</span>
+                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{record.checkin_time}</p>
+                </div>
+              </div>
+            );
+          }) : (
+            <p className="text-center text-slate-500 dark:text-slate-400 py-4">Belum ada aktivitas hari ini.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminReports({ users, attendances }) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors animate-in fade-in duration-300">
+      <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4">
+        <h3 className="text-lg font-bold text-slate-800 dark:text-white">Rekap Laporan Absensi</h3>
+        <div className="flex gap-2">
+          <button className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+            <FilterIcon /> Filter
+          </button>
+          <button className="flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm">
+            <Download size={16} /> Export CSV
+          </button>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[700px]">
+          <thead>
+            <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200 dark:border-slate-700">
+              <th className="p-4 font-medium whitespace-nowrap">Pegawai</th>
+              <th className="p-4 font-medium whitespace-nowrap">Tanggal</th>
+              <th className="p-4 font-medium whitespace-nowrap">Masuk</th>
+              <th className="p-4 font-medium whitespace-nowrap">Pulang</th>
+              <th className="p-4 font-medium whitespace-nowrap">Status</th>
+              <th className="p-4 font-medium whitespace-nowrap">Bukti</th>
+            </tr>
+          </thead>
+          <tbody>
+            {attendances.length === 0 ? (
+              <tr><td colSpan="6" className="p-8 text-center text-slate-400 dark:text-slate-500">Belum ada data laporan.</td></tr>
+            ) : (
+              attendances.map((record) => {
+                const user = users.find(u => u.id === record.user_id);
+                if (!user) return null;
+                return (
+                  <tr key={record.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <img src={user.foto} alt="foto" className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-600" />
+                        <div>
+                          <p className="font-medium text-slate-800 dark:text-slate-200 text-sm">{user.name}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{user.divisi}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4 text-slate-600 dark:text-slate-400 text-sm">{record.tanggal}</td>
+                    <td className="p-4 text-slate-800 dark:text-slate-300 font-medium text-sm">{record.checkin_time}</td>
+                    <td className="p-4 text-slate-600 dark:text-slate-400 text-sm">{record.checkout_time || '-'}</td>
+                    <td className="p-4">
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+                        {record.status}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                       {record.checkin_photo ? (
+                          <div className="w-8 h-8 rounded border border-slate-200 dark:border-slate-600 overflow-hidden cursor-pointer hover:ring-2 ring-emerald-500">
+                            <img src={record.checkin_photo} alt="Foto" className="w-full h-full object-cover" />
+                          </div>
+                       ) : '-'}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+  );
+}
+
+function AdminEmployees({ users, setUsers, showToast }) {
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', jabatan: '', divisi: '' });
+
+  const [visiblePasswords, setVisiblePasswords] = useState({});
+  const [editingPasswordUser, setEditingPasswordUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [deletingUser, setDeletingUser] = useState(null);
+
+  const togglePassword = (id) => {
+    setVisiblePasswords(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleSavePassword = (e) => {
+    e.preventDefault();
+    setUsers(users.map(u => u.id === editingPasswordUser.id ? { ...u, password: newPassword } : u));
+    setEditingPasswordUser(null);
+    setNewPassword('');
+    showToast('Password pegawai berhasil diubah!');
+  };
+
+  const handleConfirmDelete = () => {
+    setUsers(users.filter(u => u.id !== deletingUser.id));
+    setDeletingUser(null);
+    showToast('Pegawai berhasil dihapus dari sistem.', 'success');
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (users.find(u => u.email === formData.email)) {
+      showToast('Email ini sudah terdaftar!', 'error');
+      return;
+    }
+    const newUser = {
+      id: Date.now(),
+      ...formData,
+      role: 'pegawai',
+      foto: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=10b981&color=fff`
+    };
+    setUsers([...users, newUser]);
+    setShowModal(false);
+    setFormData({ name: '', email: '', password: '', jabatan: '', divisi: '' });
+    showToast('Pegawai baru berhasil ditambahkan!');
+  };
+
+  const employees = users.filter(u => u.role === 'pegawai');
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800 dark:text-white">Manajemen Pegawai</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Kelola data akun pegawai yang memiliki akses aplikasi.</p>
+        </div>
+        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-emerald-500/30 active:scale-95">
+          <UserPlus size={18} /> Tambah Pegawai
+        </button>
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200 dark:border-slate-700">
+                <th className="p-4 font-medium whitespace-nowrap">Profil Pegawai</th>
+                <th className="p-4 font-medium whitespace-nowrap">Akses Login (Email)</th>
+                <th className="p-4 font-medium whitespace-nowrap">Divisi</th>
+                <th className="p-4 font-medium whitespace-nowrap">Status Akun</th>
+                <th className="p-4 font-medium text-center whitespace-nowrap">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.length === 0 ? (
+                <tr><td colSpan="5" className="p-8 text-center text-slate-400 dark:text-slate-500">Belum ada data pegawai.</td></tr>
+              ) : (
+                employees.map(emp => (
+                  <tr key={emp.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <img src={emp.foto} alt={emp.name} className="w-10 h-10 rounded-full ring-2 ring-slate-100 dark:ring-slate-700 object-cover" />
+                        <div>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{emp.name}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{emp.jabatan}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4 text-slate-600 dark:text-slate-300 text-sm font-medium">
+                      <div className="flex flex-col gap-1">
+                        <span>{emp.email}</span>
+                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded w-max border border-slate-200 dark:border-slate-700">
+                          <Key size={12} className="text-slate-400" />
+                          <span>{visiblePasswords[emp.id] ? emp.password : '••••••••'}</span>
+                          <button onClick={() => togglePassword(emp.id)} className="hover:text-emerald-600 dark:hover:text-emerald-400 ml-1 transition-colors">
+                            {visiblePasswords[emp.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4 text-slate-600 dark:text-slate-400 text-sm">{emp.divisi}</td>
+                    <td className="p-4">
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                        Aktif
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex justify-center gap-2">
+                        <button onClick={() => { setEditingPasswordUser(emp); setNewPassword(emp.password); }} className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-lg transition-colors border border-emerald-100 dark:border-emerald-800/50" title="Ubah Password">
+                          <Key size={16} />
+                        </button>
+                        <button onClick={() => setDeletingUser(emp)} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors border border-red-100 dark:border-red-800/50" title="Hapus Pegawai">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal Tambah Pegawai */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-slate-900/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-100 transition-all border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+              <div className="flex items-center gap-2 text-slate-800 dark:text-white">
+                <div className="bg-emerald-100 dark:bg-emerald-900/50 p-2 rounded-lg text-emerald-600 dark:text-emerald-400"><UserPlus size={20} /></div>
+                <h4 className="font-bold text-lg">Tambah Akun Pegawai</h4>
+              </div>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-lg transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Nama Lengkap</label>
+                <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm" placeholder="Contoh: Andi Wijaya" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Email (Untuk Login)</label>
+                <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm" placeholder="andi@kantor.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Password Sementara</label>
+                <input type="text" required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm" placeholder="Minimal 6 karakter" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Jabatan</label>
+                  <input type="text" required value={formData.jabatan} onChange={e => setFormData({...formData, jabatan: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm" placeholder="Contoh: Staff IT" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Divisi</label>
+                  <input type="text" required value={formData.divisi} onChange={e => setFormData({...formData, divisi: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm" placeholder="IT / HR" />
+                </div>
+              </div>
+              
+              <div className="pt-4 flex gap-3 mt-6 border-t border-slate-100 dark:border-slate-700">
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 py-2.5 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Batal</button>
+                <button type="submit" className="flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg font-medium shadow-md shadow-emerald-500/20 transition-all active:scale-95">Simpan Akun</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Password */}
+      {editingPasswordUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-slate-900/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-100 transition-all border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+              <div className="flex items-center gap-2 text-slate-800 dark:text-white">
+                <div className="bg-amber-100 dark:bg-amber-900/50 p-2 rounded-lg text-amber-600 dark:text-amber-400"><Key size={20} /></div>
+                <h4 className="font-bold text-lg">Ubah Password</h4>
+              </div>
+              <button onClick={() => setEditingPasswordUser(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-lg transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleSavePassword} className="p-6 space-y-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400">Masukkan password baru untuk akun <strong>{editingPasswordUser.name}</strong>.</p>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Password Baru</label>
+                <input type="text" required minLength="3" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-lg focus:ring-2 focus:ring-amber-500 outline-none transition-all text-sm" placeholder="Ketik password baru..." />
+              </div>
+              <div className="pt-2 flex gap-3 mt-4">
+                <button type="button" onClick={() => setEditingPasswordUser(null)} className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 py-2.5 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Batal</button>
+                <button type="submit" className="flex-[2] bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-lg font-medium shadow-md shadow-amber-500/20 transition-all active:scale-95">Simpan Password</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Hapus */}
+      {deletingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-slate-900/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-100 transition-all text-center border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="p-8">
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={32} />
+              </div>
+              <h4 className="font-bold text-xl text-slate-800 dark:text-white mb-2">Hapus Pegawai?</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Anda yakin ingin menghapus akun <strong>{deletingUser.name}</strong>? Seluruh data yang terkait tidak dapat dikembalikan.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeletingUser(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 py-3 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">Batal</button>
+                <button onClick={handleConfirmDelete} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-medium hover:bg-red-700 shadow-lg shadow-red-500/30 transition-all active:scale-95">Ya, Hapus</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UserProfile({ user, onUpdateUser, showToast }) {
+  const fileInputRef = useRef(null);
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onUpdateUser({ ...user, foto: reader.result });
+        showToast('Foto profil berhasil diperbarui!');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-300">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700">
+          <h3 className="text-xl font-bold text-slate-800 dark:text-white">Profil Saya</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Kelola informasi profil dan foto akun Anda.</p>
+        </div>
+        <div className="p-8 flex flex-col md:flex-row gap-8 items-center md:items-start">
+          <div className="flex flex-col items-center gap-4">
+            <div 
+              className="relative group cursor-pointer w-32 h-32 rounded-full overflow-hidden ring-4 ring-slate-50 dark:ring-slate-700 shadow-md bg-slate-100 dark:bg-slate-900" 
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <img src={user.foto} alt="Profile" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="text-white mb-1" size={24} />
+                <span className="text-white text-xs font-medium">Ubah Foto</span>
+              </div>
+            </div>
+            <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handlePhotoChange} />
+            <button onClick={() => fileInputRef.current?.click()} className="text-sm text-emerald-600 dark:text-emerald-400 font-medium hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 rounded-lg transition-colors border border-emerald-100 dark:border-emerald-800/50">
+              Pilih Foto Baru
+            </button>
+          </div>
+          
+          <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Nama Lengkap</label>
+              <p className="text-lg font-semibold text-slate-800 dark:text-slate-200">{user.name}</p>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Email</label>
+              <p className="text-lg font-semibold text-slate-800 dark:text-slate-200">{user.email}</p>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Jabatan</label>
+              <p className="text-lg font-semibold text-slate-800 dark:text-slate-200 capitalize">{user.jabatan}</p>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Divisi</label>
+              <p className="text-lg font-semibold text-slate-800 dark:text-slate-200">{user.divisi}</p>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 sm:col-span-2">
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Hak Akses / Role</label>
+              <div className="inline-block px-3 py-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-sm font-bold rounded-lg capitalize mt-1 border border-emerald-200 dark:border-emerald-800">
+                {user.role}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
